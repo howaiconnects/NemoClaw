@@ -1,0 +1,30 @@
+{
+  "version": "0.1.0",
+  "description": "NemoClaw static team routing table — v0.1",
+  "teams": [
+    {
+      "id": "inference",
+      "label": "Inference",
+      "description": "Routes to the NIM/vLLM/NVIDIA inference provider",
+      "dispatch": "nemoclaw-blueprint/orchestrator/runner.py",
+      "endpoint": "inference.local",
+      "priority": 1
+    },
+    {
+      "id": "sandbox",
+      "label": "Sandbox",
+      "description": "Routes to the OpenShell sandbox management layer",
+      "dispatch": "nemoclaw-blueprint/orchestrator/runner.py",
+      "endpoint": "sandbox.local",
+      "priority": 2
+    },
+    {
+      "id": "human",
+      "label": "Human Fallback",
+      "description": "Tier 2 / Tier 3 degraded — human reviews routing, runs dispatch.ps1",
+      "dispatch": "scripts/dispatch.ps1",
+      "endpoint": null,
+      "priority": 99
+    }
+  ]
+}

@@ -79,6 +79,18 @@ done
 
 # ── Helpers ──────────────────────────────────────────────────────
 
+# Hard cap on total debug session runtime (30 min).
+# Guards against hung SSH / slow cluster — never bleed into next CI job.
+MAX_RUNTIME=1800
+_DEBUG_START=$(date +%s)
+check_runtime() {
+  local elapsed=$(( $(date +%s) - _DEBUG_START ))
+  if [ "$elapsed" -ge "$MAX_RUNTIME" ]; then
+    warn "MAX_RUNTIME (${MAX_RUNTIME}s) exceeded — aborting debug session."
+    exit 1
+  fi
+}
+
 TMPDIR_BASE="${TMPDIR:-/tmp}"
 COLLECT_DIR=$(mktemp -d "${TMPDIR_BASE}/nemoclaw-debug-XXXXXX")
 SANDBOX_SSH_CONFIG=""

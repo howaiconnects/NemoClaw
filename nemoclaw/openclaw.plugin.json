@@ -25,6 +25,11 @@
         "type": "string",
         "description": "Default inference provider type (nvidia, vllm, openai-compatible)",
         "default": "nvidia"
+      },
+      "serverPort": {
+        "type": "number",
+        "description": "Port for the NemoClaw v0.1 local HTTP server (GET /health, GET /teams, POST /dispatch)",
+        "default": 18788
       }
     },
     "additionalProperties": false

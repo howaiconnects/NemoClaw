@@ -17,6 +17,7 @@ import {
   describeOnboardProvider,
   loadOnboardConfig,
 } from "./onboard/config.js";
+import { startPluginServer } from "./server.js";
 
 // ---------------------------------------------------------------------------
 // OpenClaw Plugin SDK compatible types (mirrors openclaw/plugin-sdk)
@@ -131,6 +132,7 @@ export interface NemoClawConfig {
   blueprintRegistry: string;
   sandboxName: string;
   inferenceProvider: string;
+  serverPort: number;
 }
 
 function activeModelEntries(
@@ -206,6 +208,7 @@ const DEFAULT_PLUGIN_CONFIG: NemoClawConfig = {
   blueprintRegistry: "ghcr.io/nvidia/nemoclaw-blueprint",
   sandboxName: "openclaw",
   inferenceProvider: "nvidia",
+  serverPort: 18788,
 };
 
 export function getPluginConfig(api: OpenClawPluginApi): NemoClawConfig {
@@ -227,6 +230,10 @@ export function getPluginConfig(api: OpenClawPluginApi): NemoClawConfig {
       typeof raw["inferenceProvider"] === "string"
         ? raw["inferenceProvider"]
         : DEFAULT_PLUGIN_CONFIG.inferenceProvider,
+    serverPort:
+      typeof raw["serverPort"] === "number" && raw["serverPort"] > 0
+        ? raw["serverPort"]
+        : DEFAULT_PLUGIN_CONFIG.serverPort,
   };
 }
 
@@ -252,6 +259,17 @@ export default function register(api: OpenClawPluginApi): void {
   const bannerProvider = onboardCfg ? describeOnboardProvider(onboardCfg) : "NVIDIA Endpoint API";
   const bannerModel = onboardCfg?.model ?? "nvidia/nemotron-3-super-120b-a12b";
 
+  // 3. Start v0.1 HTTP plugin server (GET /health, GET /teams, POST /dispatch)
+  const pluginPort = getPluginConfig(api).serverPort;
+  startPluginServer(pluginPort)
+    .then(() => {
+      api.logger.info(`  [nemoclaw] Plugin server listening on 127.0.0.1:${String(pluginPort)}`);
+    })
+    .catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      api.logger.info(`  [nemoclaw] Plugin server failed to start: ${msg}`);
+    });
+
   api.logger.info("");
   api.logger.info("  ┌─────────────────────────────────────────────────────┐");
   api.logger.info("  │  NemoClaw registered                                │");
@@ -260,6 +278,7 @@ export default function register(api: OpenClawPluginApi): void {
   api.logger.info(`  │  Provider:  ${bannerProvider.padEnd(40)}│`);
   api.logger.info(`  │  Model:     ${bannerModel.padEnd(40)}│`);
   api.logger.info("  │  Slash:     /nemoclaw                               │");
+  api.logger.info(`  │  Server:    127.0.0.1:${String(pluginPort).padEnd(33)}│`);
   api.logger.info("  └─────────────────────────────────────────────────────┘");
   api.logger.info("");
 }

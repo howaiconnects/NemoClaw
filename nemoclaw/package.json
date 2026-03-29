@@ -11,7 +11,7 @@
     ]
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node -e \"const{copyFileSync}=require('fs'),{join}=require('path');copyFileSync(join('src','teams.json'),join('dist','teams.json'))\"",
     "dev": "tsc --watch",
     "lint": "eslint 'src/**/*.ts'",
     "lint:fix": "eslint 'src/**/*.ts' --fix",
