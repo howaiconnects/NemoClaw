@@ -1,0 +1,4 @@
+{
+  "_comment": "Review after 60 days of adoption. Raise max_lines if false-positive rate is high; lower it if large PRs are consistently under-reviewed. See CL-101.",
+  "max_lines": 1000
+}

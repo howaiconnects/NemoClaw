@@ -1,0 +1,38 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Enforces CL-101: scope additions beyond threshold require explicit justification.
+#
+# If total changed lines (insertions + deletions) exceed ci/deviation-threshold.json,
+# the PR body must contain a "Scope-justification:" trailer. The job fails if the
+# trailer is absent, prompting the contributor to either reduce scope or justify it.
+
+name: deviation-check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scope-deviation:
+    name: "CL-101 · Scope deviation check"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run scope deviation check
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: bash scripts/check-scope-deviation.sh

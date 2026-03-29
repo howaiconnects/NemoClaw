@@ -1,0 +1,154 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Enforces CLAUDE.md governance rules on every pull request.
+#
+# Job 1 — task-md-check    (CL-050): Warn if TASK.md is absent from repo root.
+#                                     Soft warning only; does not block merge.
+# Job 2 — ssot-freshness   (CL-100): Fail if bin/**, nemoclaw/src/**, or scripts/**
+#                                     changed without touching docs/about/release-notes.md.
+# Job 3 — verifiable-criteria (CL-116): Fail if PR body contains no verifiable criterion
+#                                        (fenced curl block, make invocation, test file
+#                                        reference, or image/screenshot embed).
+
+name: governance
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # CL-050: Every branch must commit a TASK.md before agent dispatch.
+  # Soft warning — does not block merge during initial adoption period.
+  # ---------------------------------------------------------------------------
+  task-md-check:
+    name: "CL-050 · TASK.md present"
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: TASK.md
+          sparse-checkout-cone-mode: false
+
+      - name: Check for TASK.md
+        run: |
+          if [ ! -f "TASK.md" ]; then
+            echo "::warning::CL-050: No TASK.md found at repo root. Add a task plan before agent dispatch. See CLAUDE.md rule CL-050."
+          else
+            echo "OK: TASK.md is present."
+          fi
+
+  # ---------------------------------------------------------------------------
+  # CL-100: No phase closes without SSOT governance doc updates.
+  # Proxy: if code paths changed, release-notes.md must be touched.
+  # ---------------------------------------------------------------------------
+  ssot-freshness:
+    name: "CL-100 · SSOT release-notes updated"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed paths
+        id: changed
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          CHANGED=$(git diff --name-only "$BASE_SHA"...HEAD)
+          echo "$CHANGED"
+
+          CODE_CHANGED=false
+          NOTES_CHANGED=false
+
+          while IFS= read -r file; do
+            case "$file" in
+              bin/*|nemoclaw/src/*|scripts/*)
+                CODE_CHANGED=true ;;
+              docs/about/release-notes.md)
+                NOTES_CHANGED=true ;;
+            esac
+          done <<< "$CHANGED"
+
+          echo "code_changed=$CODE_CHANGED" >> "$GITHUB_OUTPUT"
+          echo "notes_changed=$NOTES_CHANGED" >> "$GITHUB_OUTPUT"
+
+      - name: Enforce release-notes update
+        env:
+          CODE_CHANGED: ${{ steps.changed.outputs.code_changed }}
+          NOTES_CHANGED: ${{ steps.changed.outputs.notes_changed }}
+        run: |
+          if [ "$CODE_CHANGED" = "true" ] && [ "$NOTES_CHANGED" = "false" ]; then
+            echo "::error::CL-100: Changes detected in bin/, nemoclaw/src/, or scripts/ but docs/about/release-notes.md was not updated."
+            echo "Add a release-notes entry for any user-facing behavior change. See CLAUDE.md rule CL-100."
+            exit 1
+          fi
+          echo "OK: SSOT freshness check passed."
+
+  # ---------------------------------------------------------------------------
+  # CL-116: Every success criterion must be verifiable.
+  # PR body must contain at least one of:
+  #   - A fenced code block containing 'curl'
+  #   - A 'make <target>' invocation on its own line
+  #   - A reference to a test file (*.test.ts or *.test.js)
+  #   - An image embed or the word 'screenshot'
+  # ---------------------------------------------------------------------------
+  verifiable-criteria:
+    name: "CL-116 · Verifiable exit criterion present"
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Check PR body for verifiable criterion
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          python3 - <<'PY'
+          import os, re, sys
+
+          body = os.environ.get("PR_BODY", "")
+
+          patterns = [
+              # Fenced code block (``` or ~~~) that contains the word curl
+              (r"(?s)(?:```|~~~)[^\n]*\n.*?\bcurl\b.*?(?:```|~~~)", "fenced curl block"),
+              # make <target> on its own line (with optional leading whitespace)
+              (r"(?m)^\s*make\s+\S+", "make invocation"),
+              # Reference to a test file name
+              (r"\b\w[\w./\-]*\.test\.[jt]s\b", "test file reference"),
+              # Markdown image embed or the word screenshot
+              (r"!\[|screenshot", "screenshot/image embed"),
+          ]
+
+          matched = None
+          for pattern, label in patterns:
+              if re.search(pattern, body, re.IGNORECASE):
+                  matched = label
+                  break
+
+          if matched:
+              print(f"OK: Verifiable criterion found ({matched}).")
+              sys.exit(0)
+
+          print("FAIL: PR body contains no verifiable exit criterion.")
+          print("")
+          print("Per CL-116, every PR must include at least one of:")
+          print("  - A fenced code block with a curl command")
+          print("  - A 'make <target>' invocation")
+          print("  - A reference to a test file (*.test.ts / *.test.js)")
+          print("  - A screenshot or image embed")
+          print("")
+          print("Add one to the PR body before merging.")
+          sys.exit(1)
+          PY
